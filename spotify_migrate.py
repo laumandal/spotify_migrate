@@ -265,13 +265,18 @@ for m in media_types:
     media_uris = list(new_user_library[m.name]["uri"])
     print(f"{len(media_uris)} to delete with {m.del_function}...")
 
-    #artists is a special case
-    if m.name != "followed_artists":
+    # artists is a special case
+    if m.name not in ["followed_artists", "playlists"]:
         for chunk in chunker(media_uris):
             getattr(sp2, m.del_function)(chunk)
     elif m.name == "followed_artists":
         followed_artists_ids = [uri[15:] for uri in media_uris]
         for chunk in chunker(followed_artists_ids):
+            getattr(sp2, m.del_function)(chunk)
+    # playlists have to be removed one at a time so no chunker
+    elif m.name == "playlists":
+        playlist_ids = [uri[17:] for uri in media_uris]
+        for chunk in playlist_ids:
             getattr(sp2, m.del_function)(chunk)
     print(f"Done deleting {m.name}")
     print()

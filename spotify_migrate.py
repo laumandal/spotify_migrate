@@ -5,6 +5,8 @@ import pandas as pd
 from pandas.io.json import json_normalize
 from collections import namedtuple
 import yaml
+import requests
+import base64
 
 # For playing around and finding the structure of the returned json, the following
 # is useful:
@@ -22,9 +24,12 @@ import yaml
 # that the albums line up in the order you liked them so you can trace back
 # over them. This sends one request a second so it is deathly slow but you 
 # are only likely to run it once. 
-# TODO: Add a check when importing playlists for new_user that if the owner
-# is old_user, instead of following, grab all the songs and create a new 
-# playlist (maintain order too)
+# TODO: sort the playlists df (and others) so that when reimporting, they are
+# in the right order
+# TODO: Auth is still a bit messy. Consider naming and deleting the creds before
+# a run so we always run the same full flow.
+# TODO: add an identifier to the functions, so we just say 'id' for example
+# and don't need a special case later (eg for artists, playlists)
 
 
 #%%
@@ -53,10 +58,11 @@ sp = spotipy.Spotify(
         redirect_uri="http://localhost:8080/callback/",
         username=credentials["username_old"],
         scope=("user-library-read " "playlist-read-private " "user-follow-read "),
-        cache_path=".spotipyoauthcache",
+        # cache_path=".spotipyoauthcache",
     )
 )
 
+#%%
 sp2 = spotipy.Spotify(
     auth_manager=SpotifyOAuth(
         client_id=credentials["client_id"],
@@ -69,15 +75,36 @@ sp2 = spotipy.Spotify(
             "playlist-read-private "
             "playlist-modify-private "
             "playlist-modify-public "
+            "ugc-image-upload "
             "user-follow-read "
             "user-follow-modify"
         ),
-        cache_path=".spotipyoauthcache2",
+        # cache_path=".spotipyoauthcache2",
     )
 )
 
-#%% Helper Functions
+#%%
+logout_url = 'https://spotify.com/logout'
 
+# get the id using credentials which will prompt a login
+login_old_id = sp.me()['id']
+webbrowser.open_new(logout_url)
+
+# force a manual keypress to stop the second auth happening before
+# the first account is logged out
+input("Press Enter to continue...")
+
+login_new_id = sp2.me()['id']
+
+# Confirm correct accounts have been authorised by comparing expected to actual ids
+if credentials["username_old"] == login_old_id and credentials["username_new"] == login_new_id:
+    print("User logins look good 💫")
+else:
+    print(f"Expected {credentials['username_old']}, login was {login_old_id}")
+    print(f"Expected {credentials['username_new']}, login was {login_new_id}")
+    raise Exception('User ids and logins do not match.')
+
+#%% Helper Functions
 
 def deep_get(d, keys):
     assert type(keys) is list
@@ -113,6 +140,62 @@ def get_full_list(function, chunksize=50, base_level=[]):
 def chunker(to_chunk, chunk_size=50):
     return [to_chunk[i : i + chunk_size] for i in range(0, len(to_chunk), chunk_size)]
 
+def get_library(media_types, spotify_creds, export_to_csv=False):
+    library = {}
+    for m in media_types:
+
+        saved_media = get_full_list(
+            function=getattr(
+                spotify_creds, m.read_function
+            ),  # follow with () if you want to run
+            base_level=m.base_level,
+        )
+
+        field_lists = {}
+
+        for field in m.fields:
+            field_lists[field.name] = [
+                deep_get(media, field.field_path) for media in saved_media
+            ]
+
+        df = pd.DataFrame(field_lists)
+        if export_to_csv is True:
+            df.to_csv(f"{m.name}.csv")
+        library[m.name] = df
+    return library
+
+def recreate_playlist(playlist_id, creds_old, creds_new):
+    # get uris of items in playlist
+    results = creds_old.playlist(playlist_id)
+    track_uris = [x['track']['uri'] for x in results['tracks']['items']]
+
+    # get the cover image
+    img_info = creds_old.playlist_cover_image(playlist_id)
+
+    # it appears that spotify generated mosaic images for playlists have
+    # multiple sizes, whereas custom do not (and height and width are None)
+    # We'll use this to only copy custom images over
+    custom_img_used = True if len(img_info)==1 else False
+
+    # create a new playlist
+    ret = creds_new.user_playlist_create(
+        user=credentials["username_new"], 
+        name=results['name'], 
+        public=results['public'], 
+        description=results['description'])
+
+    new_playlist_uri = ret['uri']
+
+    if custom_img_used is True:
+        # get the img using the url from spotify's returned info
+        response = requests.get(img_info[0]['url'])
+        # convert to a base64 string as required for upload
+        img_string = base64.b64encode(response.content)
+        # upload to new playlist
+        creds_new.playlist_upload_cover_image(new_playlist_uri, img_string)
+
+    # Add songs to new playlist
+    creds_new.playlist_add_items(new_playlist_uri, track_uris)
 
 #%% Generic media types
 
@@ -203,33 +286,6 @@ media_types = [
     ),
 ]
 
-#%%
-
-def get_library(media_types, spotify_creds, export_to_csv=False):
-    library = {}
-    for m in media_types:
-
-        saved_media = get_full_list(
-            function=getattr(
-                spotify_creds, m.read_function
-            ),  # follow with () if you want to run
-            base_level=m.base_level,
-        )
-
-        field_lists = {}
-
-        for field in m.fields:
-            field_lists[field.name] = [
-                deep_get(media, field.field_path) for media in saved_media
-            ]
-
-        df = pd.DataFrame(field_lists)
-        if export_to_csv is True:
-            df.to_csv(f"{m.name}.csv")
-        library[m.name] = df
-    return library
-
-
 #%% write to the new account
 old_user_library = get_library(media_types, sp, export_to_csv=True)
 
@@ -250,9 +306,13 @@ for m in media_types:
         # playlists need to have the owner id as well, and have to be added
         # one at a time
         playlist_ids = [uri[17:] for uri in media_uris]
-        owner_ids = list(old_user_library[m.name]["owner_id"])
+        owner_ids = list(old_user_library["playlists"]["owner_id"])
         for (owner_id,playlist_id) in zip(owner_ids,playlist_ids):
-            getattr(sp2, m.write_function)(owner_id, playlist_id)
+            # for playlists created by old user, recreate for new user
+            if owner_id == credentials["username_old"]:
+                recreate_playlist(playlist_id, sp, sp2)
+            else:
+                getattr(sp2, m.write_function)(owner_id, playlist_id)
     print(f"Done adding {m.name}")
     print()
 
@@ -284,6 +344,37 @@ for m in media_types:
 #%%
 def rebuild_playlist():
     pass
+#%%
+
+owner_ids = list(old_user_library["playlists"]["owner_id"])
+for owner_id in owner_ids:
+    if owner_id == credentials["username_old"]:
+        print(owner_id)
+    
+
+#%%
+
+def show_tracks(tracks):
+    for i, item in enumerate(tracks['items']):
+        track = item['track']
+        print("   %d %32.32s %s" % (i, track['artists'][0]['name'],
+            track['name']))
+
+playlists = sp.user_playlists(credentials["username_old"])
+for playlist in playlists['items']:
+    if playlist['owner']['id'] == credentials["username_old"]:
+        print()
+        print(playlist['name'])
+        print ('  total tracks', playlist['tracks']['total'])
+        results = sp.playlist(playlist['id'],
+            fields="tracks,next")
+        tracks = results['tracks']
+        show_tracks(tracks)
+        while tracks['next']:
+            tracks = sp.next(tracks)
+            show_tracks(tracks)
+
+
 
 # %%
 # For playlist, will need to get all tracks and make again as a new playlist

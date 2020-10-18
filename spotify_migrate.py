@@ -30,6 +30,7 @@ import base64
 # a run so we always run the same full flow.
 # TODO: add an identifier to the functions, so we just say 'id' for example
 # and don't need a special case later (eg for artists, playlists)
+# TODO: more sensible logging
 
 
 #%%
@@ -167,7 +168,7 @@ def get_library(media_types, spotify_creds, export_to_csv=False):
 def recreate_playlist(playlist_id, creds_old, creds_new):
     # get uris of items in playlist
     results = creds_old.playlist(playlist_id)
-    track_uris = [x['track']['uri'] for x in results['tracks']['items']]
+    track_uris = [x['track']['uri'] for x in results['tracks']['items'] if x['track']['is_local']==False]
 
     # get the cover image
     img_info = creds_old.playlist_cover_image(playlist_id)

@@ -1,4 +1,3 @@
-#%%
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import pandas as pd
@@ -20,10 +19,9 @@ import time
 # - Spotify URI: eg spotify:playlist:04au4deViCEcMwkEmyz8eg
 # - Spotify URL: eg https://open.spotify.com/playlist/04au4deViCEcMwkEmyz8eg?si=aHux3al8TtOVJVeU79IGZg
 # - Spotify ID:  eg 04au4deViCEcMwkEmyz8eg
-# Any can be used with spotipy functions, except for user_follow_artists,
-# which for some reason needs IDs
+# Most spotipy functions can use any of them, with a few (non obvious) exceptions - check the docs. 
 
-# NOTE pls can't cuurently get the users a user currently followes
+# NOTE pls can't currently get the users a user currently followes
 
 # Load creds from yaml file
 credentials = yaml.safe_load(open("credentials.yml"))
@@ -68,14 +66,14 @@ def authenticate():
 
     # force a manual keypress to stop the second auth happening before
     # any signed is account 
-    input("Press enter once the Spotify homepage has launched...")
+    input("Press enter once the Spotify homepage has launched... 💻")
     # get the id using credentials which will prompt a login
     login_old_id = sp.me()['id']
     webbrowser.open_new(logout_url)
 
     # force a manual keypress to stop the second auth happening before
     # the first account is logged out
-    input("Press enter once the Spotify homepage has launched...(yeah I know it's annoying to do twice, sorry.)")
+    input("Press enter once the Spotify homepage has launched...(yeah I know it's annoying to do twice, sorry 🙇‍♂️)")
 
     login_new_id = sp2.me()['id']
 

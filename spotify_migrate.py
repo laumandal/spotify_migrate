@@ -66,14 +66,14 @@ def authenticate():
 
     # force a manual keypress to stop the second auth happening before
     # any signed is account 
-    input("Press enter once the Spotify homepage has launched... 💻")
+    input("Press enter once the Spotify homepage has launched... 💻, then if prompted login with the OLD spotify id you want to copy FROM")
     # get the id using credentials which will prompt a login
     login_old_id = sp.me()['id']
     webbrowser.open_new(logout_url)
 
     # force a manual keypress to stop the second auth happening before
     # the first account is logged out
-    input("Press enter once the Spotify homepage has launched...(yeah I know it's annoying to do twice, sorry 🙇‍♂️)")
+    input("Press enter once the Spotify homepage has launched... then if prompted login with the NEW spotify id you want to copy TO)")
 
     login_new_id = sp2.me()['id']
 
@@ -200,7 +200,7 @@ def copy_all_to_new_account(sp, sp2):
             print(f"{num_own_playlists} personal playlists to recreate 👷‍♀️")
             print(f"and {num_followed_playlists} to follow 🚶‍♀️")
 
-            for (owner_id,playlist_id) in tqdm(zip(owner_ids,media_ids), leave=False):
+            for (owner_id,playlist_id) in tqdm(zip(owner_ids,media_ids), leave=True):
                 # for playlists created by old user, recreate for new user
                 if owner_id == credentials["username_old"]:
                     recreate_playlist(playlist_id, sp, sp2)

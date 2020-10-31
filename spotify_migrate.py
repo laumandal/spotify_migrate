@@ -7,6 +7,9 @@ from collections import namedtuple
 import yaml
 import requests
 import base64
+import webbrowser
+from tqdm import tqdm
+import time
 
 # For playing around and finding the structure of the returned json, the following
 # is useful:
@@ -20,35 +23,16 @@ import base64
 # Any can be used with spotipy functions, except for user_follow_artists,
 # which for some reason needs IDs
 
-# TODO:  add a low_but_in_order flag because to some people (like me) its important
-# that the albums line up in the order you liked them so you can trace back
-# over them. This sends one request a second so it is deathly slow but you 
-# are only likely to run it once. 
-# TODO: sort the playlists df (and others) so that when reimporting, they are
-# in the right order
-# TODO: Auth is still a bit messy. Consider naming and deleting the creds before
-# a run so we always run the same full flow.
 # TODO: add an identifier to the functions, so we just say 'id' for example
 # and don't need a special case later (eg for artists, playlists)
 # TODO: more sensible logging
+# TODO: wrap into functions, add command line useage
 
+# NOTE pls can't get the users a user currently followes
 
-#%%
-"""
-Want a function to 'export' and again to 'import' to a different account.
-
-What to export:
-- Likes (on songs)
-- Liked albums
-- TODO: own created playlists
-- others' playlists added to libraries
-- follower artists
-NOTE pls can't get the users a user currently followes
-"""
 #%%
 # Load creds from yaml file
 credentials = yaml.load(open("credentials.yml"))
-
 
 # %%
 
@@ -159,7 +143,8 @@ def get_library(media_types, spotify_creds, export_to_csv=False):
                 deep_get(media, field.field_path) for media in saved_media
             ]
 
-        df = pd.DataFrame(field_lists)
+        #reverse the order for reimporting later
+        df = pd.DataFrame(field_lists)[::-1].reset_index(drop=True)
         if export_to_csv is True:
             df.to_csv(f"{m.name}.csv")
         library[m.name] = df
@@ -290,25 +275,35 @@ media_types = [
 #%% write to the new account
 old_user_library = get_library(media_types, sp, export_to_csv=True)
 
+#%%
+
+# TODO:
+# Playlists: fixed
+# Podcasts: are in a random order...?
+# Artists: random (always same... so not random)
+# Albums: random (always same... so not random)
+
+
 for m in media_types:
-    print(f"About to add {m.name}")
+    
     media_uris = list(old_user_library[m.name]["uri"])
-    print(f"{len(media_uris)} to add with {m.write_function}...")
+    print(f"About to add {len(media_uris)} {m.name}")
 
     #artists is a special case
     if m.name not in ["followed_artists", "playlists"]:
-        for chunk in chunker(media_uris):
+        for chunk in tqdm(chunker(media_uris, chunk_size=1), leave=False):
             getattr(sp2, m.write_function)(chunk)
+
     elif m.name == "followed_artists":
         media_ids = [uri[15:] for uri in media_uris]
-        for chunk in chunker(media_ids):
+        for chunk in tqdm(chunker(media_ids, chunk_size=1), leave=False):
             getattr(sp2, m.write_function)(chunk)
     elif m.name == "playlists":
         # playlists need to have the owner id as well, and have to be added
         # one at a time
         playlist_ids = [uri[17:] for uri in media_uris]
         owner_ids = list(old_user_library["playlists"]["owner_id"])
-        for (owner_id,playlist_id) in zip(owner_ids,playlist_ids):
+        for (owner_id,playlist_id) in tqdm(zip(owner_ids,playlist_ids), leave=False):
             # for playlists created by old user, recreate for new user
             if owner_id == credentials["username_old"]:
                 recreate_playlist(playlist_id, sp, sp2)
@@ -316,15 +311,16 @@ for m in media_types:
                 getattr(sp2, m.write_function)(owner_id, playlist_id)
     print(f"Done adding {m.name}")
     print()
+    #try to avoid hitting rate limits
+    time.sleep(1)
 
 #%% # CLEAR ALL FOR NEW USER
 
 new_user_library = get_library(media_types, sp2)
 
 for m in media_types:
-    print(f"About to delete {m.name}")
     media_uris = list(new_user_library[m.name]["uri"])
-    print(f"{len(media_uris)} to delete with {m.del_function}...")
+    tqdm.write(f"About to delete {len(media_uris)} {m.name}")
 
     # artists is a special case
     if m.name not in ["followed_artists", "playlists"]:
@@ -339,7 +335,7 @@ for m in media_types:
         playlist_ids = [uri[17:] for uri in media_uris]
         for chunk in playlist_ids:
             getattr(sp2, m.del_function)(chunk)
-    print(f"Done deleting {m.name}")
+    tqdm.write(f"Done deleting {m.name}")
     print()
 
 #%%
@@ -374,33 +370,3 @@ for playlist in playlists['items']:
         while tracks['next']:
             tracks = sp.next(tracks)
             show_tracks(tracks)
-
-
-
-# %%
-# For playlist, will need to get all tracks and make again as a new playlist
-
-# current_user_saved_albums_add(albums=[])
-# current_user_saved_shows_add(shows=[])
-# current_user_saved_tracks_add(tracks=None)
-# user_follow_artists(ids=[])
-
-# #%% playlist stuff
-# playlist(playlist_id, fields=None, market=None, additional_types=('track', ))
-# playlist_items(playlist_id, fields=None, limit=100, offset=0, market=None, additional_types=('track', 'episode'))
-# playlist_tracks(playlist_id, fields=None, limit=100, offset=0, market=None, additional_types=('track', ))
-
-# #for other people's playlists
-# user_playlist_follow_playlist(playlist_owner_id, playlist_id)
-
-# user_playlist_create(user, name, public=True, collaborative=False, description='')
-# playlist_add_items(playlist_id, items, position=None)
-# user_playlist_add_tracks(user, playlist_id, tracks, position=None)
-
-
-# #%% for delete
-# current_user_saved_albums_delete(albums=[])
-# current_user_saved_shows_delete(shows=[])
-# current_user_saved_tracks_delete(tracks=None)
-# current_user_unfollow_playlist(playlist_id)
-# user_unfollow_artists(ids=[])

@@ -23,13 +23,10 @@ import time
 # Any can be used with spotipy functions, except for user_follow_artists,
 # which for some reason needs IDs
 
-# TODO: more sensible logging
-
-# NOTE pls can't get the users a user currently followes
+# NOTE pls can't cuurently get the users a user currently followes
 
 # Load creds from yaml file
 credentials = yaml.safe_load(open("credentials.yml"))
-
 
 def authenticate():
 
@@ -71,14 +68,14 @@ def authenticate():
 
     # force a manual keypress to stop the second auth happening before
     # any signed is account 
-    input("Press Enter to continue once Spotify home page came up...")
+    input("Press enter once the Spotify homepage has launched...")
     # get the id using credentials which will prompt a login
     login_old_id = sp.me()['id']
     webbrowser.open_new(logout_url)
 
     # force a manual keypress to stop the second auth happening before
     # the first account is logged out
-    input("Press Enter to continue once Spotify home page came up...")
+    input("Press enter once the Spotify homepage has launched...(yeah I know it's annoying to do twice, sorry.)")
 
     login_new_id = sp2.me()['id']
 
@@ -86,6 +83,7 @@ def authenticate():
     if credentials["username_old"] == login_old_id and credentials["username_new"] == login_new_id:
         print("User logins look good 💫")
     else:
+        print("User logins dont look good 🙅‍♂️")
         print(f"Expected {credentials['username_old']}, login was {login_old_id}")
         print(f"Expected {credentials['username_new']}, login was {login_new_id}")
         raise Exception('User ids and logins do not match.')
@@ -237,39 +235,13 @@ def export_library_to_csvs(sp):
     _ = get_library(media_types, sp, export_to_csv=True)
 
 def main():
+    print("Beginning spotify migrate... 🎶💻🎤")
+    print("Authenticating... 🔑")
     (sp, sp2) = authenticate()
+    print("Copying over library... 🎷")
     copy_all_to_new_account(sp, sp2)
+    print("All done here! Enjoy ✨")
 
 if __name__ == "__main__":
     # execute only if run as a script
     main()
-
-#%% DELETE EVERYTHING BELOW
-
-# owner_ids = list(old_user_library["playlists"]["owner_id"])
-# for owner_id in owner_ids:
-#     if owner_id == credentials["username_old"]:
-#         print(owner_id)
-    
-
-# #%%
-
-# def show_tracks(tracks):
-#     for i, item in enumerate(tracks['items']):
-#         track = item['track']
-#         print("   %d %32.32s %s" % (i, track['artists'][0]['name'],
-#             track['name']))
-
-# playlists = sp.user_playlists(credentials["username_old"])
-# for playlist in playlists['items']:
-#     if playlist['owner']['id'] == credentials["username_old"]:
-#         print()
-#         print(playlist['name'])
-#         print ('  total tracks', playlist['tracks']['total'])
-#         results = sp.playlist(playlist['id'],
-#             fields="tracks,next")
-#         tracks = results['tracks']
-#         show_tracks(tracks)
-#         while tracks['next']:
-#             tracks = sp.next(tracks)
-#             show_tracks(tracks)

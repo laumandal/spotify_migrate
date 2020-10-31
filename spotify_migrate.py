@@ -28,7 +28,7 @@ import time
 # NOTE pls can't get the users a user currently followes
 
 # Load creds from yaml file
-credentials = yaml.load(open("credentials.yml"))
+credentials = yaml.safe_load(open("credentials.yml"))
 
 
 def authenticate():
@@ -197,6 +197,8 @@ def copy_all_to_new_account(sp, sp2):
             for chunk in tqdm(chunker(media_ids, chunk_size=1), leave=False):
                 getattr(sp2, m.write_function)(chunk)
         elif m.name == "playlists":
+            num_followed_playlists = 0
+            num_own_playlists = 0
             # playlists need to have the owner id as well, and have to be added
             # one at a time
             owner_ids = list(old_user_library["playlists"]["owner_id"])
@@ -204,9 +206,11 @@ def copy_all_to_new_account(sp, sp2):
                 # for playlists created by old user, recreate for new user
                 if owner_id == credentials["username_old"]:
                     recreate_playlist(playlist_id, sp, sp2)
+                    num_own_playlists += 1
                 else:
                     getattr(sp2, m.write_function)(owner_id, playlist_id)
-        print(f"Done adding {m.name}")
+                    num_followed_playlists += 1
+        print(f"Done adding {m.name}, {num_followed_playlists} followed playlists and {num_own_playlists} rebuilt playists")
         print()
         #try to avoid hitting rate limits
         time.sleep(1)

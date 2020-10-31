@@ -3,7 +3,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import pandas as pd
 from pandas.io.json import json_normalize
-from collections import namedtuple
+from media_types import media_types
 import yaml
 import requests
 import base64
@@ -23,73 +23,74 @@ import time
 # Any can be used with spotipy functions, except for user_follow_artists,
 # which for some reason needs IDs
 
-# TODO: add an identifier to the functions, so we just say 'id' for example
-# and don't need a special case later (eg for artists, playlists)
 # TODO: more sensible logging
-# TODO: wrap into functions, add command line useage
 
 # NOTE pls can't get the users a user currently followes
 
-#%%
 # Load creds from yaml file
 credentials = yaml.load(open("credentials.yml"))
 
-# %%
 
-sp = spotipy.Spotify(
-    auth_manager=SpotifyOAuth(
-        client_id=credentials["client_id"],
-        client_secret=credentials["client_secret"],
-        redirect_uri="http://localhost:8080/callback/",
-        username=credentials["username_old"],
-        scope=("user-library-read " "playlist-read-private " "user-follow-read "),
-        # cache_path=".spotipyoauthcache",
+def authenticate():
+
+    sp = spotipy.Spotify(
+        auth_manager=SpotifyOAuth(
+            client_id=credentials["client_id"],
+            client_secret=credentials["client_secret"],
+            redirect_uri="http://localhost:8080/callback/",
+            username=credentials["username_old"],
+            scope=("user-library-read " "playlist-read-private " "user-follow-read "),
+            # cache_path=".spotipyoauthcache",
+        )
     )
-)
 
-#%%
-sp2 = spotipy.Spotify(
-    auth_manager=SpotifyOAuth(
-        client_id=credentials["client_id"],
-        client_secret=credentials["client_secret"],
-        redirect_uri="http://localhost:8080/callback/",
-        username=credentials["username_new"],
-        scope=(
-            "user-library-read "
-            "user-library-modify "
-            "playlist-read-private "
-            "playlist-modify-private "
-            "playlist-modify-public "
-            "ugc-image-upload "
-            "user-follow-read "
-            "user-follow-modify"
-        ),
-        # cache_path=".spotipyoauthcache2",
+    sp2 = spotipy.Spotify(
+        auth_manager=SpotifyOAuth(
+            client_id=credentials["client_id"],
+            client_secret=credentials["client_secret"],
+            redirect_uri="http://localhost:8080/callback/",
+            username=credentials["username_new"],
+            scope=(
+                "user-library-read "
+                "user-library-modify "
+                "playlist-read-private "
+                "playlist-modify-private "
+                "playlist-modify-public "
+                "ugc-image-upload "
+                "user-follow-read "
+                "user-follow-modify"
+            ),
+            # cache_path=".spotipyoauthcache2",
+        )
     )
-)
 
-#%%
-logout_url = 'https://spotify.com/logout'
+    logout_url = 'https://spotify.com/logout'
 
-# get the id using credentials which will prompt a login
-login_old_id = sp.me()['id']
-webbrowser.open_new(logout_url)
+    # force a log out of any logged in account
+    webbrowser.open_new(logout_url)
 
-# force a manual keypress to stop the second auth happening before
-# the first account is logged out
-input("Press Enter to continue...")
+    # force a manual keypress to stop the second auth happening before
+    # any signed is account 
+    input("Press Enter to continue once Spotify home page came up...")
+    # get the id using credentials which will prompt a login
+    login_old_id = sp.me()['id']
+    webbrowser.open_new(logout_url)
 
-login_new_id = sp2.me()['id']
+    # force a manual keypress to stop the second auth happening before
+    # the first account is logged out
+    input("Press Enter to continue once Spotify home page came up...")
 
-# Confirm correct accounts have been authorised by comparing expected to actual ids
-if credentials["username_old"] == login_old_id and credentials["username_new"] == login_new_id:
-    print("User logins look good 💫")
-else:
-    print(f"Expected {credentials['username_old']}, login was {login_old_id}")
-    print(f"Expected {credentials['username_new']}, login was {login_new_id}")
-    raise Exception('User ids and logins do not match.')
+    login_new_id = sp2.me()['id']
 
-#%% Helper Functions
+    # Confirm correct accounts have been authorised by comparing expected to actual ids
+    if credentials["username_old"] == login_old_id and credentials["username_new"] == login_new_id:
+        print("User logins look good 💫")
+    else:
+        print(f"Expected {credentials['username_old']}, login was {login_old_id}")
+        print(f"Expected {credentials['username_new']}, login was {login_new_id}")
+        raise Exception('User ids and logins do not match.')
+
+    return (sp, sp2)
 
 def deep_get(d, keys):
     assert type(keys) is list
@@ -183,190 +184,88 @@ def recreate_playlist(playlist_id, creds_old, creds_new):
     # Add songs to new playlist
     creds_new.playlist_add_items(new_playlist_uri, track_uris)
 
-#%% Generic media types
+def copy_all_to_new_account(sp, sp2):
+    old_user_library = get_library(media_types, sp, export_to_csv=False)
 
-Media = namedtuple(
-    typename="Media",
-    field_names=[
-        "name",
-        "fields",
-        "base_level",
-        "read_function",
-        "write_function",
-        "del_function",
-    ],
-    defaults=([],),
-)
-Field = namedtuple(typename="Field", field_names=["name", "field_path"])
+    for m in media_types:
+        
+        media_ids = list(old_user_library[m.name][m.write_id])
+        print(f"About to add {len(media_ids)} {m.name}")
 
-# Define the media types and fields we are interested in exporting
-media_types = [
-    Media(
-        name="albums",
-        fields=[
-            Field("uri", ["album", "uri"]),
-            Field("name", ["album", "name"]),
-            Field("artist", ["album", "artists", "name"]),
-            Field("label", ["album", "label"]),
-            Field("added_at", ["added_at"]),
-        ],
-        base_level=[],
-        read_function="current_user_saved_albums",
-        write_function="current_user_saved_albums_add",
-        del_function="current_user_saved_albums_delete",
-    ),
-    Media(
-        name="tracks",
-        fields=[
-            Field("uri", ["track", "uri"]),
-            Field("name", ["track", "name"]),
-            Field("artist", ["track", "artists", "name"]),
-            Field("added_at", ["added_at"]),
-        ],
-        base_level=[],
-        read_function="current_user_saved_tracks",
-        write_function="current_user_saved_tracks_add",
-        del_function="current_user_saved_tracks_delete",
-    ),
-    Media(
-        name="shows",
-        fields=[
-            Field("uri", ["show", "uri"]),
-            Field("name", ["show", "name"]),
-            Field("publisher", ["show", "publisher"]),
-            Field("description", ["show", "description"]),
-            Field("added_at", ["added_at"]),
-        ],
-        base_level=[],
-        read_function="current_user_saved_shows",
-        write_function="current_user_saved_shows_add",
-        del_function="current_user_saved_shows_delete",
-    ),
-    Media(
-        name="playlists",
-        fields=[
-            Field("uri", ["uri"]),
-            Field("name", ["name"]),
-            Field("owner", ["owner", "display_name"]),
-            Field("owner_id", ["owner", "id"]),
-            Field("public", ["public"]),
-            Field("tracks", ["tracks", "total"]),
-        ],
-        base_level=[],
-        read_function="current_user_playlists",
-        write_function="user_playlist_follow_playlist",
-        del_function="current_user_unfollow_playlist",
-    ),
-    Media(
-        name="followed_artists",
-        fields=[
-            Field("uri", ["uri"]),
-            Field("name", ["name"]),
-            Field("popularity", ["popularity"]),
-            Field("followers", ["followers", "total"]),
-        ],
-        base_level=["artists"],
-        read_function="current_user_followed_artists",
-        write_function="user_follow_artists",
-        del_function="user_unfollow_artists",
-    ),
-]
-
-#%% write to the new account
-old_user_library = get_library(media_types, sp, export_to_csv=True)
-
-#%%
-
-# TODO:
-# Playlists: fixed
-# Podcasts: are in a random order...?
-# Artists: random (always same... so not random)
-# Albums: random (always same... so not random)
-
-
-for m in media_types:
-    
-    media_uris = list(old_user_library[m.name]["uri"])
-    print(f"About to add {len(media_uris)} {m.name}")
-
-    #artists is a special case
-    if m.name not in ["followed_artists", "playlists"]:
-        for chunk in tqdm(chunker(media_uris, chunk_size=1), leave=False):
-            getattr(sp2, m.write_function)(chunk)
-
-    elif m.name == "followed_artists":
-        media_ids = [uri[15:] for uri in media_uris]
-        for chunk in tqdm(chunker(media_ids, chunk_size=1), leave=False):
-            getattr(sp2, m.write_function)(chunk)
-    elif m.name == "playlists":
-        # playlists need to have the owner id as well, and have to be added
-        # one at a time
-        playlist_ids = [uri[17:] for uri in media_uris]
-        owner_ids = list(old_user_library["playlists"]["owner_id"])
-        for (owner_id,playlist_id) in tqdm(zip(owner_ids,playlist_ids), leave=False):
-            # for playlists created by old user, recreate for new user
-            if owner_id == credentials["username_old"]:
-                recreate_playlist(playlist_id, sp, sp2)
-            else:
-                getattr(sp2, m.write_function)(owner_id, playlist_id)
-    print(f"Done adding {m.name}")
-    print()
-    #try to avoid hitting rate limits
-    time.sleep(1)
-
-#%% # CLEAR ALL FOR NEW USER
-
-new_user_library = get_library(media_types, sp2)
-
-for m in media_types:
-    media_uris = list(new_user_library[m.name]["uri"])
-    tqdm.write(f"About to delete {len(media_uris)} {m.name}")
-
-    # artists is a special case
-    if m.name not in ["followed_artists", "playlists"]:
-        for chunk in chunker(media_uris):
-            getattr(sp2, m.del_function)(chunk)
-    elif m.name == "followed_artists":
-        followed_artists_ids = [uri[15:] for uri in media_uris]
-        for chunk in chunker(followed_artists_ids):
-            getattr(sp2, m.del_function)(chunk)
-    # playlists have to be removed one at a time so no chunker
-    elif m.name == "playlists":
-        playlist_ids = [uri[17:] for uri in media_uris]
-        for chunk in playlist_ids:
-            getattr(sp2, m.del_function)(chunk)
-    tqdm.write(f"Done deleting {m.name}")
-    print()
-
-#%%
-def rebuild_playlist():
-    pass
-#%%
-
-owner_ids = list(old_user_library["playlists"]["owner_id"])
-for owner_id in owner_ids:
-    if owner_id == credentials["username_old"]:
-        print(owner_id)
-    
-
-#%%
-
-def show_tracks(tracks):
-    for i, item in enumerate(tracks['items']):
-        track = item['track']
-        print("   %d %32.32s %s" % (i, track['artists'][0]['name'],
-            track['name']))
-
-playlists = sp.user_playlists(credentials["username_old"])
-for playlist in playlists['items']:
-    if playlist['owner']['id'] == credentials["username_old"]:
+        #playlists is a special case
+        if m.name not in ["playlists"]:
+            for chunk in tqdm(chunker(media_ids, chunk_size=1), leave=False):
+                getattr(sp2, m.write_function)(chunk)
+        elif m.name == "playlists":
+            # playlists need to have the owner id as well, and have to be added
+            # one at a time
+            owner_ids = list(old_user_library["playlists"]["owner_id"])
+            for (owner_id,playlist_id) in tqdm(zip(owner_ids,media_ids), leave=False):
+                # for playlists created by old user, recreate for new user
+                if owner_id == credentials["username_old"]:
+                    recreate_playlist(playlist_id, sp, sp2)
+                else:
+                    getattr(sp2, m.write_function)(owner_id, playlist_id)
+        print(f"Done adding {m.name}")
         print()
-        print(playlist['name'])
-        print ('  total tracks', playlist['tracks']['total'])
-        results = sp.playlist(playlist['id'],
-            fields="tracks,next")
-        tracks = results['tracks']
-        show_tracks(tracks)
-        while tracks['next']:
-            tracks = sp.next(tracks)
-            show_tracks(tracks)
+        #try to avoid hitting rate limits
+        time.sleep(1)
+
+def wipe_everything(sp2):
+    new_user_library = get_library(media_types, sp2)
+
+    for m in media_types:
+        media_ids = list(new_user_library[m.name][m.write_id])
+        tqdm.write(f"About to delete {len(media_ids)} {m.name}")
+
+        # playlists is a special case
+        if m.name != "playlists":
+            for chunk in chunker(media_ids):
+                getattr(sp2, m.del_function)(chunk)
+        # playlists have to be removed one at a time so no chunker
+        elif m.name == "playlists":
+            for playlist_id in media_ids:
+                getattr(sp2, m.del_function)(playlist_id)
+        tqdm.write(f"Done deleting {m.name}")
+        print()
+
+def export_library_to_csvs(sp):
+    _ = get_library(media_types, sp, export_to_csv=True)
+
+def main():
+    (sp, sp2) = authenticate()
+    copy_all_to_new_account(sp, sp2)
+
+if __name__ == "__main__":
+    # execute only if run as a script
+    main()
+
+#%% DELETE EVERYTHING BELOW
+
+# owner_ids = list(old_user_library["playlists"]["owner_id"])
+# for owner_id in owner_ids:
+#     if owner_id == credentials["username_old"]:
+#         print(owner_id)
+    
+
+# #%%
+
+# def show_tracks(tracks):
+#     for i, item in enumerate(tracks['items']):
+#         track = item['track']
+#         print("   %d %32.32s %s" % (i, track['artists'][0]['name'],
+#             track['name']))
+
+# playlists = sp.user_playlists(credentials["username_old"])
+# for playlist in playlists['items']:
+#     if playlist['owner']['id'] == credentials["username_old"]:
+#         print()
+#         print(playlist['name'])
+#         print ('  total tracks', playlist['tracks']['total'])
+#         results = sp.playlist(playlist['id'],
+#             fields="tracks,next")
+#         tracks = results['tracks']
+#         show_tracks(tracks)
+#         while tracks['next']:
+#             tracks = sp.next(tracks)
+#             show_tracks(tracks)

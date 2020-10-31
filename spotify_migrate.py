@@ -193,11 +193,13 @@ def copy_all_to_new_account(sp, sp2):
             for chunk in tqdm(chunker(media_ids, chunk_size=1), leave=False):
                 getattr(sp2, m.write_function)(chunk)
         elif m.name == "playlists":
-            num_followed_playlists = 0
-            num_own_playlists = 0
-            # playlists need to have the owner id as well, and have to be added
-            # one at a time
+            # playlists need to have the owner id as well, and have to be added one at a time
             owner_ids = list(old_user_library["playlists"]["owner_id"])
+            num_own_playlists = owner_ids.count(credentials["username_old"])
+            num_followed_playlists = len(media_ids)-num_own_playlists
+            print(f"{num_own_playlists} personal playlists to recreate 👷‍♀️")
+            print(f"and {num_followed_playlists} to follow 🚶‍♀️")
+
             for (owner_id,playlist_id) in tqdm(zip(owner_ids,media_ids), leave=False):
                 # for playlists created by old user, recreate for new user
                 if owner_id == credentials["username_old"]:
@@ -206,7 +208,7 @@ def copy_all_to_new_account(sp, sp2):
                 else:
                     getattr(sp2, m.write_function)(owner_id, playlist_id)
                     num_followed_playlists += 1
-        print(f"Done adding {m.name}, {num_followed_playlists} followed playlists and {num_own_playlists} rebuilt playists")
+        print(f"Done adding {m.name}")
         print()
         #try to avoid hitting rate limits
         time.sleep(1)

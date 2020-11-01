@@ -21,7 +21,7 @@ Then you need to create an app on __Spotify for Developers__ in order to get cre
 4. Click 'show client secret', then copy the `Client ID` and `Client Secret` into `credentials.yml`
 5. Click 'edit settings' and add `http://localhost:8080/callback/` and `http://www.spotify.com/logout` to the `Redirect URIs`
 
-Once credentials.yml is filled out, you can simply run from the command line: `python3 spotify_migrate.py`
+Once `credentials.yml` is filled out, you can run from the command line: `python3 spotify_migrate.py`.
 
 ## Usage notes
 
@@ -32,6 +32,7 @@ During authentication for both accounts, the browser will pop up a few times (to
 * You can export everything to csvs using the function `export_library_to_csvs`
 * To limit the media types imported/exported, simply change the list in `media_types.py`
 
+_If you are are playing around with the additional functionality mentioned above, run `authenticate()` first, which will return the two sets of credentials `sp` (old account) and `sp2` (new account) needed to pass around to the different functions._
 
 
 

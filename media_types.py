@@ -1,7 +1,8 @@
 from collections import namedtuple
 
-# defaults can be None or an iterable of default values. Since fields with a default value 
-# must come after any fields without a default, the defaults are applied to the rightmost 
+# namedtuple defaults:
+# defaults can be None or an iterable of default values. Since fields with a default value
+# must come after any fields without a default, the defaults are applied to the rightmost
 # parameters. For example, if the fieldnames are ['x', 'y', 'z'] and the defaults are (1, 2),
 #  then x will be a required argument, y will default to 1, and z will default to 2.
 
@@ -16,11 +17,9 @@ Media = namedtuple(
         "base_level",
         "write_id",
     ],
-    defaults=([],"uri"),
+    defaults=([], "uri"),
 )
 Field = namedtuple(typename="Field", field_names=["name", "field_path"])
-
-# USE PY IGNORE THING!!!!!!
 
 # Define the media types and fields we are interested in exporting
 media_types = [
@@ -36,7 +35,7 @@ media_types = [
         read_function="current_user_saved_albums",
         write_function="current_user_saved_albums_add",
         del_function="current_user_saved_albums_delete",
-    ), # type: ignore
+    ),  # type: ignore
     Media(
         name="tracks",
         fields=[
@@ -48,7 +47,7 @@ media_types = [
         read_function="current_user_saved_tracks",
         write_function="current_user_saved_tracks_add",
         del_function="current_user_saved_tracks_delete",
-    ), # type: ignore
+    ),  # type: ignore
     Media(
         name="shows",
         fields=[
@@ -61,7 +60,7 @@ media_types = [
         read_function="current_user_saved_shows",
         write_function="current_user_saved_shows_add",
         del_function="current_user_saved_shows_delete",
-    ), # type: ignore
+    ),  # type: ignore
     Media(
         name="playlists",
         fields=[
@@ -76,8 +75,8 @@ media_types = [
         read_function="current_user_playlists",
         write_function="user_playlist_follow_playlist",
         del_function="current_user_unfollow_playlist",
-        write_id = "id",
-    ), # type: ignore
+        write_id="id",
+    ),  # type: ignore
     Media(
         name="followed_artists",
         fields=[
@@ -91,6 +90,6 @@ media_types = [
         write_function="user_follow_artists",
         del_function="user_unfollow_artists",
         base_level=["artists"],
-        write_id = "id",
+        write_id="id",
     ),
 ]

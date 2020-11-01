@@ -65,8 +65,7 @@ def authenticate():
     # force a log out of any logged in account
     webbrowser.open_new(logout_url)
 
-    # force a manual keypress to stop the second auth happening before
-    # any signed is account
+    # force a manual keypress to stop the auth happening before logout
     input(
         "Press enter once the Spotify homepage has launched... 💻, then if prompted login with the OLD spotify id you want to copy FROM"
     )
@@ -74,8 +73,7 @@ def authenticate():
     login_old_id = sp.me()["id"]
     webbrowser.open_new(logout_url)
 
-    # force a manual keypress to stop the second auth happening before
-    # the first account is logged out
+    # force a manual keypress to stop the second auth happening before the first account is logged out
     input(
         "Press enter once the Spotify homepage has launched... then if prompted login with the NEW spotify id you want to copy TO"
     )
